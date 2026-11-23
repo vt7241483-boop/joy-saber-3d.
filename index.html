@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#070817">
+<title>Joy Saber 3D</title>
+<style>
+  *{box-sizing:border-box} html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#070817;color:#fff;font-family:system-ui,-apple-system,sans-serif;touch-action:none}
+  #game{position:fixed;inset:0;width:100%;height:100%;display:block}
+  #hud{position:fixed;top:env(safe-area-inset-top,12px);left:0;right:0;display:flex;justify-content:space-between;align-items:center;padding:12px 16px;pointer-events:none;text-shadow:0 0 12px #42dfff;font-weight:800;letter-spacing:.08em}
+  .pill{background:#0a1236bb;border:1px solid #4bdfff77;border-radius:14px;padding:8px 12px;font-size:13px}
+  #hint{position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) + 18px);left:50%;transform:translateX(-50%);width:min(90%,420px);text-align:center;color:#dcecffaa;font-size:13px;pointer-events:none;text-shadow:0 2px 8px #000}
+  #overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at center,#111c46dd,#03040eee);padding:24px}
+  .panel{width:min(100%,430px);text-align:center;border:1px solid #55dfff88;border-radius:24px;padding:28px 22px;background:#090e27e8;box-shadow:0 0 45px #00bfff22}
+  h1{margin:0 0 8px;font-size:36px;letter-spacing:.06em;color:#fff;text-shadow:0 0 18px #00cfff}
+  p{color:#b9c8e8;line-height:1.5}
+  button{border:0;border-radius:16px;padding:15px 26px;font-size:17px;font-weight:800;color:#06101d;background:linear-gradient(90deg,#4df2ff,#b2faff);box-shadow:0 0 24px #22dfff55}
+  .small{font-size:11px;color:#8292b8;margin-top:15px}
+  #toast{position:fixed;top:22%;left:50%;transform:translateX(-50%);font-size:25px;font-weight:900;color:#fff;text-shadow:0 0 18px #00dfff;opacity:0;pointer-events:none}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="hud"><div class="pill">JOY SABER 3D</div><div class="pill">SCORE <span id="score">0</span></div><div class="pill">COMBO <span id="combo">0</span></div></div>
+<div id="hint">Веди пальцем, чтобы двигать мечи • Коснись экрана, чтобы сделать взмах</div>
+<div id="toast">NICE!</div>
+<div id="overlay"><div class="panel">
+  <h1>JOY SABER</h1>
+  <p>Неоновая ритм-арена от первого лица. Размахивай мечами и разбивай цветные блоки!</p>
+  <button id="start">НАЧАТЬ ИГРУ</button>
+  <div class="small">Прототип для Safari · Лучше играть в альбомной ориентации</div>
+</div></div>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+
+const canvas=document.querySelector('#game');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false});
+renderer.setPixelRatio(Math.min(devicePixelRatio,1.7));
+renderer.setSize(innerWidth,innerHeight);
+renderer.setClearColor(0x050817,1);
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+const scene=new THREE.Scene();
+scene.fog=new THREE.Fog(0x050817,9, thirty=34);
+const camera=new THREE.PerspectiveCamera(72,innerWidth/innerHeight,.1,60);
+camera.position.set(0,1.55,5.5);
+scene.add(new THREE.HemisphereLight(0x9bdcff,0x15102e,1.6));
+const key=new THREE.PointLight(0x25cfff,35,18);key.position.set(0,4,1);scene.add(key);
+const pink=new THREE.PointLight(0xff176d,22,14);pink.position.set(-5,2,-7);scene.add(pink);
+const blue=new THREE.PointLight(0x00aaff,24,14);blue.position.set(5,2,-7);scene.add(blue);
+
+const floor=new THREE.Mesh(new THREE.PlaneGeometry(40,40),new THREE.MeshStandardMaterial({color:0x080d25,metalness:.55,roughness:.45}));
+floor.rotation.x=-Math.PI/2;floor.position.y=-.15;floor.position.z=-8;scene.add(floor);
+const grid=new THREE.GridHelper(36,36,0x13bde8,0x17345d);grid.position.set(0,-.13,-8);scene.add(grid);
+for(let i=0;i<12;i++){
+  const z=-i*2.7-2;
+  for(const x of [-7,7]){
+    const pillar=new THREE.Mesh(new THREE.BoxGeometry(.16,4,.18),new THREE.MeshBasicMaterial({color:x<0?0x00bfff:0xff247b}));
+    pillar.position.set(x,1.8,z);scene.add(pillar);
+  }
+}
+const saberMatL=new THREE.MeshStandardMaterial({color:0x20cfff,emissive:0x00bfff,emissiveIntensity:2.6,metalness:.2,roughness:.25});
+const saberMatR=new THREE.MeshStandardMaterial({color:0xff3b9c,emissive:0xff0877,emissiveIntensity:2.6,metalness:.2,roughness:.25});
+const hiltMat=new THREE.MeshStandardMaterial({color:0x9aa8c5,metalness:.85,roughness:.25});
+function makeSaber(x,mat){
+  const group=new THREE.Group();
+  const blade=new THREE.Mesh(new THREE.CylinderGeometry(.055,.075,1.65,12),mat);blade.position.y=.95;group.add(blade);
+  const glow=new THREE.Mesh(new THREE.CylinderGeometry(.105,.12,1.62,12),new THREE.MeshBasicMaterial({color:mat.color,transparent:true,opacity:.18}));glow.position.y=.95;group.add(glow);
+  const grip=new THREE.Mesh(new THREE.CylinderGeometry(.09,.09,.42,10),hiltMat);grip.position.y=-.08;group.add(grip);
+  group.position.set(x,-.78,1.4);scene.add(group);return group;
+}
+const leftSaber=makeSaber(-.78,saberMatL),rightSaber=makeSaber(.78,saberMatR);
+const cubeGeo=new THREE.BoxGeometry(.72,.72,.72);
+const materials=[
+ new THREE.MeshStandardMaterial({color:0x13cfff,emissive:0x008dff,emissiveIntensity:1.7,metalness:.25,roughness:.28}),
+ new THREE.MeshStandardMaterial({color:0xff287f,emissive:0xff075c,emissiveIntensity:1.7,metalness:.25,roughness:.28})
+];
+const targets=[];
+function spawnTarget(z=-22){
+ const m=new THREE.Mesh(cubeGeo,materials[Math.random()<.5?0:1]);
+ m.position.set((Math.random()-.5)*4.4,Math.random()*1.7+.25,z);
+ m.rotation.set(Math.random(),Math.random(),Math.random());
+ scene.add(m);targets.push({mesh:m,hit:false,spin:(Math.random()-.5)*1.8});
+}
+for(let i=0;i<7;i++)spawnTarget(-10-i*4);
+let score=0,combo=0,playing=false,moveX=0,moveY=0,swing=0,lastSpawn=0;
+const scoreEl=document.querySelector('#score'),comboEl=document.querySelector('#combo'),toast=document.querySelector('#toast');
+function updateScore(){scoreEl.textContent=score;comboEl.textContent=combo}
+function popToast(t){toast.textContent=t;toast.style.opacity=1;clearTimeout(popToast.timer);popToast.timer=setTimeout(()=>toast.style.opacity=0,500)}
+function doSwing(){swing=1;let found=false;for(const t of targets){if(!t.hit&&t.mesh.position.z>-.9&&t.mesh.position.z<3.0&&Math.abs(t.mesh.position.x-moveX)<1.8&&Math.abs(t.mesh.position.y-(1.2+moveY))<1.7){t.hit=true;scene.remove(t.mesh);score+=10;combo++;found=true;updateScore();}}
+if(!found){combo=0;updateScore();}else popToast(combo>2?'COMBO!':'NICE!');}
+let down=false,lastX=0,lastY=0;
+function pointerDown(e){down=true;lastX=e.clientX;lastY=e.clientY;doSwing()}
+function pointerMove(e){if(!down)return;const dx=(e.clientX-lastX)/innerWidth,dy=(e.clientY-lastY)/innerHeight;moveX=THREE.MathUtils.clamp(moveX+dx*5,-2.1,2.1);moveY=THREE.MathUtils.clamp(moveY-dy*4,-.8,.8);lastX=e.clientX;lastY=e.clientY;}
+function pointerUp(){down=false}
+canvas.addEventListener('pointerdown',pointerDown);canvas.addEventListener('pointermove',pointerMove);window.addEventListener('pointerup',pointerUp);
+document.querySelector('#start').addEventListener('click',()=>{document.querySelector('#overlay').style.display='none';playing=true;});
+const clock=new THREE.Clock();
+function animate(){
+ requestAnimationFrame(animate);const dt=Math.min(clock.getDelta(),.04),t=clock.elapsedTime;
+ camera.position.x+=(moveX*.13-camera.position.x)*dt*2.5;camera.position.y+=(1.55+moveY*.12-camera.position.y)*dt*2.5;
+ camera.rotation.z+=(moveX*-.025-camera.rotation.z)*dt*2;
+ leftSaber.position.x=-.78+moveX*.18;rightSaber.position.x=.78+moveX*.18;
+ leftSaber.rotation.z=Math.sin(t*2)*.05+swing*.55;rightSaber.rotation.z=-Math.sin(t*2)*.05-swing*.55;
+ swing=Math.max(0,swing-dt*3.5);
+ if(playing){
+   for(let i=targets.length-1;i>=0;i--){const o=targets[i];if(o.hit){targets.splice(i,1);continue;}o.mesh.position.z+=dt*4.1;o.mesh.rotation.x+=dt*.5;o.mesh.rotation.y+=dt*o.spin;
+     if(o.mesh.position.z>5){scene.remove(o.mesh);targets.splice(i,1);combo=0;updateScore();}
+   }
+   if(t-lastSpawn>1.45&&targets.length<8){spawnTarget(-24);lastSpawn=t;}
+ }
+ renderer.render(scene,camera);
+}
+animate();
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+</script>
+</body></html>
